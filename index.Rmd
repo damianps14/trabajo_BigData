@@ -1,0 +1,830 @@
+---
+title: "Índice de libertad económica"
+subtitle: "para el año 2019"
+author: "Damián Pérez Soler (pesoda@alumni.uv.es)"
+date: "Diciembre de 2021 (actualizado el `r format(Sys.time(), '%d-%m-%Y')`)"
+output:
+  html_document:
+    css: "./assets/css_index.css"
+    theme: paper
+    highlight: textmate 
+    toc: true
+    toc_depth: 3 
+    toc_float: 
+      collapsed: true
+      smooth_scroll: true
+    self_contained: true
+    number_sections: false
+    df_print: kable
+    code_download: true
+    code_folding: hide
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r packages-setup, include = FALSE}
+library(tidyverse)
+library(stringr)
+library(klippy) #-remotes::install_github("rlesur/klippy")
+library(ggplot2)
+library(rio)
+library(gganimate)
+library(sf)
+library(rnaturalearth)
+library(gt) #install.packages("gt")
+library(wordcloud2) #install.packages("wordcloud2")
+library(ggThemeAssist)
+library(treemap)
+library(treemapify) #install.packages(“treemapify”)
+library(knitr)
+library(plotly)
+library(kableExtra)
+library(viridisLite)
+library(viridis)
+
+```
+
+```{r chunk-setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE, message = FALSE, warning = FALSE, 
+                      #results = "hold",
+                      cache = FALSE, cache.path = "/caches/", comment = "#>",
+                      #fig.width = 7, #fig.height= 7,   
+                      #out.width = 7, out.height = 7,
+                      collapse = TRUE,  fig.show = "hold",
+                      fig.asp = 0.628, out.width = "75%", fig.align = "center")
+knitr::opts_chunk$set(dev = "png", dev.args = list(type = "cairo-png"))
+```
+
+
+```{r options-setup, include = FALSE}
+options(scipen = 999) #- para quitar la notación científica
+options("yaml.eval.expr" = TRUE) 
+```
+
+
+```{r klippy, echo = FALSE}
+klippy::klippy(position = c("top", "right")) #- remotes::install_github("rlesur/klippy")
+```
+
+
+<hr class="linea-black">
+
+Trabajo elaborado para la asignatura "Programación y manejo de datos en la era del Big Data" de la Universitat de València durante el curso 2021-2022. El repo del trabajo está [aquí](https://github.com/damianps14/trabajo_BigData){target="_blank"}. 
+
+La página web de la asignatura y los trabajos de mis compañeros pueden verse [aquí](https://perezp44.github.io/intro-ds-21-22-web/07-trabajos.html){target="_blank"}.
+
+
+<hr class="linea-red">
+
+# Introducción
+
+```{r, echo = FALSE, eval = TRUE}
+
+knitr::include_graphics(here::here("imagenes", "imagen2.jpg"))
+
+```
+
+<br><br>
+
+El Índice de Libertad Económica es elaborado anualmente por la Fundación Heritage y The Wall Street Journal. Su objetivo declarado es medir el nivel de economía de mercado que un país admite. El ranking puntúa datos entre 0 y 100, donde 0 significa «ausencia de libertad económica» y 100 significa «libertad económica total».
+
+Más allá de sus objetivos, está pensado para ayudar a los lectores a realizar un seguimiento de más de dos décadas del avance en la libertad económica, la prosperidad y las oportunidades, y promover estas ideas en sus hogares, escuelas y comunidades. El índice cubre 12 libertades, desde los derechos de propiedad hasta la libertad financiera, en 186 países. En concreto, vamos estudiar el índice para el año 2019, anterior a la pandemia mundial de covid-19.
+
+# Proceso de datos
+
+Descargamos los datos [aqui](https://www.kaggle.com/lewisduncan93/the-economic-freedom-index?select=economic_freedom_index2019_data.csv). A continuación, situamos los datos en la carpeta datos y realizamos las siguientes modificaciones:
+
+```{r, warning = FALSE, message = FALSE}
+df <- read.csv("./datos/economic_freedom_index2019_data.csv")
+
+#- ponemos las variables en forma numérica
+
+df <- df %>% arrange(desc(X2019.Score)) %>% 
+    filter(!X2019.Score == 'N/A')
+
+#seleccionamos las variables que nos interesan
+
+df <- df %>% 
+  rename(Score_2019 = "X2019.Score",
+         GDP_capita = "GDP.per.Capita..PPP.") %>%
+  select(Country, Region, World.Rank, Region.Rank, Score_2019, Property.Rights, Judical.Effectiveness, Government.Integrity, Business.Freedom, Labor.Freedom, Monetary.Freedom, Trade.Freedom, Financial.Freedom, GDP_capita) 
+
+#renombramos paises
+
+df$Country <- recode(df$Country,
+                     "Hong Kong SAR" = "Hong Kong",
+                     "Czech Republic" = "Czech Rep.",
+                     "Korea, South" = "Korea",
+                     "Brunei Darussalam" = "Brunei",
+                     "Slovak Republic" = "Slovakia",
+                     "Cabo Verde" = "Cape Verde",
+                     "Kyrgyz Republic" = "Kyrgyzstan",
+                     "Bosnia and Herzegovina" = "Bosnia and Herz.",
+                     "Dominican Republic" = "Dominican Rep.",
+                     "Lao P.D.R." = "Lao PDR",
+                     "Solomon Islands" = "Solomon Is.",
+                     "São Tomé and Príncipe" = "São Tomé and Principe",
+                     "Burma" = "Myanmar",
+                     "Macau" = "Macao",
+                     "Taiwan" = "Taiwan",
+                     "Saint Vincent and the Grenadines" = "St. Vin. and Gren.",
+                     "Congo, Democratic Republic of the Congo" = "Dem. Rep. Congo",
+                     "Korea, North" = "Dem. Rep. Korea",
+                     "Central African Republic" = "Central African Rep.",
+                     "Equatorial Guinea" = "Eq. Guinea",
+                     "Congo, Republic of" = "Congo",
+                     "Eswatini" = "Swaziland")
+
+df$GDP_capita <- recode(df$GDP_capita,
+                              "$1,700 (2015 est.)" = "$1,700")
+
+#Eliminamos el simbolo del dólar 
+
+df <- df %>% mutate(GDP_capita = str_replace(GDP_capita, "\\$", "" ))
+
+#Eliminamos las comas para pasarlo a numerico y las remplazamos por puntos
+
+df <- df %>% mutate(GDP_capita = str_replace(GDP_capita, ",", "" ))
+
+df <- transform(df, Score_2019 = as.numeric(Score_2019),
+                Property.Rights = as.numeric(Property.Rights),
+                Judical.Effectiveness = as.numeric(Judical.Effectiveness),
+                Labor.Freedom = as.numeric(Labor.Freedom),
+                Financial.Freedom = as.numeric(Financial.Freedom),
+                GDP_capita = as.numeric(GDP_capita))
+
+#.eliminamos los países que no tienen puntuacion
+
+df <- df %>% arrange(desc(Score_2019)) %>% 
+    filter(!Score_2019 == 'N/A')
+
+#añadimos el siguiente comentario
+
+df <- df %>%
+  mutate(Grado_libertad = case_when( 
+    Score_2019 > 80 ~ "Libre",
+    Score_2019 > 70 & Score_2019 < 80   ~ "Generalmente libre",
+    Score_2019 > 60 & Score_2019 < 70   ~ "Moderadamente libre" , 
+    Score_2019 > 50 & Score_2019 < 60   ~ "Generalmente autoritario",
+    Score_2019 < 50 ~ "Autoritario"))
+
+df <- df %>%
+   select(Country, Region, World.Rank, Region.Rank, Score_2019, Grado_libertad, Property.Rights, Judical.Effectiveness, Government.Integrity, Business.Freedom, Labor.Freedom, Monetary.Freedom, Trade.Freedom, Financial.Freedom, GDP_capita)
+
+```
+
+En esta tabla se puede observar y buscar cualquier elemento del data frame:
+
+```{r, eval = TRUE}
+DT::datatable(df)
+```
+
+# Análisis de las puntuaciones por países {.tabset .tabset-pills} 
+
+Vamos a analizar los 20 países con mayor y menor puntuación puntuación en el índice.
+
+En primer lugar, el top 20 son países desarrollados, con unas instituciones democrátricas consolidadas que favorecen el crecimiento económico. 
+En segundo lugar, el top 20 con menor puntuación son países cuyas instituciones son realmente poco beneficiosas para el crecimiento. La gran mayoría son países totalitarios que presentan una elevada corrupción.
+
+## Top 20 mayor puntuación
+
+```{r, eval = TRUE, warning = FALSE}
+# top 20
+df_20 <- df %>%
+  group_by(Country) %>%
+  ungroup() %>%
+  slice_max(Score_2019, n = 20)
+
+#Convertirmos a factor la columna Razón
+df_20$Country <- factor(df_20$Country,levels = df_20$Country)
+
+p1 <- ggplot(df_20, aes(y = fct_rev(Country),
+                  x = Score_2019)) +
+  geom_col(fill = "#2A759F") +
+  geom_text(aes(label = Score_2019), hjust = -0.15,size = 3.25) +
+  scale_x_continuous(breaks = seq(0, 100, 30), limits = c(0, 100)) +
+  labs(title = "Índice de libertad económica",
+       subtitle = "Top 20, año 2019",
+       y = "Puntuación", x = "País") +
+  theme_classic()
+p1
+
+```
+
+## Wordcloud
+
+```{r, fig.height = 2, fig.width = 5 ,dpi = 150,fig.align = "center", eval= TRUE}
+
+df_1 <- df %>%
+  select(Country, Score_2019)
+
+df_1$Country <- recode(df_1$Country, 
+                     "United States"="USA",
+        "Hong Kong" = "HK",
+        "United Kingdom" = "UK",
+        "United Arab Emirates" = "EAU")
+
+wordcloud2(data = df_1, shape = "circle", size = 0.3)
+
+```
+
+## Otra forma de visualizar los datos
+
+```{r, eval = TRUE}
+
+df_5 <- df %>%
+  group_by(Country) %>%
+  ungroup() %>%
+  slice_max(Score_2019, n = 5)
+
+p2 <- treemap(df_5,
+            index = "Country",
+            vSize ="Score_2019",
+            type = "index",
+            palette = "Set2",
+            (col2rgb(bg.labels = c("white"), silent = TRUE)),
+            align.labels= list(c("center", "center"),
+                               c("right", "bottom")),
+            title = "Top 5 con mayor índice de libertad económica")
+p2
+
+
+```
+
+## Tabla
+
+```{r, eval = TRUE}
+df_20 <- df %>%
+  slice_max(Score_2019, n = 20) %>%
+  select(Country, Region, World.Rank, Region.Rank, Score_2019, Grado_libertad) %>%
+  rename("País" = Country, "Región" = Region, "Ranking" = World.Rank, "Ranking regional" = Region.Rank, "Puntuación" = Score_2019, "Grado de libertad" = Grado_libertad)
+
+gt_20 <- gt(df_20) %>% 
+  tab_header(title = md("**Top 20 países con mayor libertad económica**"),
+             subtitle = "en 2019")
+
+gt_20
+
+```
+
+## Top 20 menor puntuación
+
+```{r, eval = TRUE, warning = FALSE}
+# top 20
+df_min <- df %>%
+  group_by(Country) %>%
+  ungroup() %>%
+  slice_min(Score_2019, n = 20)
+
+#Convertirmos a factor la columna Razón
+df_min$Country <- factor(df_min$Country,levels = df_min$Country)
+
+p3 <- ggplot(df_min, aes(y = fct_rev(Country),
+                  x = Score_2019)) +
+  geom_col(fill = "#2A759F") +
+  geom_text(aes(label = Score_2019), hjust = -0.15,size = 3.25) +
+  scale_x_continuous(breaks = seq(0, 100, 30), limits = c(0, 100)) +
+  labs(title = "Índice de libertad económica",
+       subtitle = "Top 20 con menor puntuación, año 2019",
+       y = "Puntuación", x = "País") +
+  theme_classic()
+p3
+
+```
+
+## Otra forma de visualizar los datos
+
+```{r, eval = TRUE}
+
+df_min_5 <- df %>%
+  group_by(Country) %>%
+  ungroup() %>%
+  slice_min(Score_2019, n = 5)
+
+p4 <- treemap(df_min_5,
+            index = "Country",
+            vSize ="Score_2019",
+            type = "index",
+            palette = "Set2",
+            (col2rgb(bg.labels = c("white"), silent = TRUE)),
+            align.labels= list(c("center", "center"),
+                               c("right", "bottom")),
+            title = "Top 5 con menor índice de libertad económica")
+p4
+
+```
+
+## Tabla
+
+```{r, eval = TRUE}
+df_min <- df %>%
+  slice_min(Score_2019, n = 20) %>%
+  select(Country, Region, World.Rank, Region.Rank, Score_2019, Grado_libertad) %>%
+  rename("País" = Country, "Región" = Region, "Ranking" = World.Rank, "Ranking regional" = Region.Rank, "Puntuación" = Score_2019, "Grado de libertad" = Grado_libertad)
+
+gt_min <- gt(df_min) %>% 
+  tab_header(title = md("**Top 20 países con menor libertad económica**"),
+             subtitle = "en 2019")
+
+gt_min
+
+```
+
+# Análisis de los diferentes componentes del índice 
+
+Vamos a llevar a cabo un análisis de algunos de los componentes que considero que son importantes a la hora de explicar el grado de libertad de los países.
+
+## Derechos de propiedad {.tabset .tabset-pills}
+
+### Gráfico
+
+```{r, eval = TRUE}
+
+df_comp <- df %>%
+  select(!GDP_capita)
+
+df_prop <- df_comp %>%
+  select(Country, Region, World.Rank, Region.Rank, Property.Rights)
+
+df_prop1 <- df_prop %>%
+  slice_max(Property.Rights, n = 10) %>%
+  select(Country, Region, World.Rank, Region.Rank, Property.Rights)
+
+df_prop2 <- df_prop %>%
+  slice_min(Property.Rights, n = 5) %>%
+  arrange(desc(Property.Rights)) %>%
+  select(Country, Region, World.Rank, Region.Rank, Property.Rights)
+
+#Convertirmos a factor la columna Razón
+df_prop1$Country <- factor(df_prop1$Country,levels = df_prop1$Country)
+
+ggplot(df_prop1, aes(y = fct_rev(Country), 
+                     x = Property.Rights)) +
+  geom_col(fill = "#2A759F", position = position_stack(reverse = TRUE)) +
+  geom_text(aes(label = Property.Rights), hjust = -0.15, size = 3.25) +
+  scale_x_continuous(breaks = seq(0, 100, 30), limits = c(0, 100)) +
+  labs(title = "Top 10 paises con mejores derechos de propiedad",
+       subtitle = "en 2019",
+       x = "Puntuación derechos de propiedad",
+       y = "Países") +
+  theme(axis.text.x = element_text(angle = 30)) +
+  theme_classic()
+
+```
+
+### Tabla
+
+```{r, eval = TRUE}
+
+df_prop1 <- df_prop %>%
+  slice_max(Property.Rights, n = 10) %>%
+  select(Country, Region, World.Rank, Region.Rank, Property.Rights) %>%
+  rename("País" = Country, "Región" = Region, "Ranking mundial" = World.Rank, "Ranking regional" = Region.Rank, "Derechos de propiedad" = Property.Rights)
+
+
+knitr::kable(df_prop1, 
+             align = "c", 
+             caption = "Top 10 paises con mejores derechos de propiedad",
+             digits = 2) %>%
+  kableExtra::kable_styling(fixed_thead = list(enabled = T, 
+                                               background = "white")) %>%
+  column_spec(1, background = "white")
+
+```
+
+## Efectividad judicial {.tabset .tabset-pills}
+
+### Gráfico
+
+```{r, eval = TRUE}
+
+df_jud <- df_comp %>%
+  select(Country, Region, World.Rank, Region.Rank, Judical.Effectiveness)
+
+df_jud1 <- df_jud %>%
+  slice_max(Judical.Effectiveness, n = 10) %>%
+  select(Country, Region, World.Rank, Region.Rank, Judical.Effectiveness)
+
+#Convertirmos a factor la columna Razón
+df_jud1$Country<-factor(df_jud1$Country, levels = df_jud1$Country)
+
+my_10 <- c('#9e0142','#d53e4f','#f46d43','#fdae61','#fee08b','#e6f598','#abdda4','#66c2a5','#3288bd','#5e4fa2')
+
+ggplot(df_jud1, aes(y = fct_rev(Country), x = Judical.Effectiveness)) +
+  geom_col(fill = my_10) +
+  geom_text(aes(label = Judical.Effectiveness), hjust = -0.15, size = 3.25) +
+  scale_fill_manual(values = my_10) +
+  scale_x_continuous(breaks = seq(0, 100, 30), limits = c(0, 100)) +
+  labs(title = "Top 10 paises con mejor efectividad judicial",
+       subtitle = "en 2019",
+       x = "Puntuación en efectividad judicial",
+       y = "Países") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle =30))
+
+```
+
+### Tabla
+
+```{r, eval = TRUE}
+
+df_jud1 <- df_jud %>%
+  slice_max(Judical.Effectiveness, n = 10) %>%
+  select(Country, Region, World.Rank, Region.Rank, Judical.Effectiveness) %>%
+  rename("País" = Country, "Región" = Region, "Ranking mundial" = World.Rank, "Ranking regional" = Region.Rank, "Efectividad judicial" = Judical.Effectiveness)
+
+
+knitr::kable(df_jud1, 
+             align = "c", 
+             caption = "Top 10 paises con mayor efectividad judicial",
+             digits = 2) %>%
+  kableExtra::kable_styling(fixed_thead = list(enabled = T, 
+                                               background = "white")) %>%
+  column_spec(1, background = "white")
+
+```
+
+## Libertad laboral {.tabset .tabset-pills}
+
+Entran en juego paises africanos como Namibia o Nigeria.
+También Estados Unidos, de los pocos países occidentales en mantener su tradicional flexibilidad laboral, asunto muy criticado por los países europeos, que han impuesto una mayor rigidez (salarios mínimos, mayores indemnizaciones por despido, etc) desde los años 70 y que explicaron el período de histéresis cuyos efectos incluso aún perduran. Es por ello que solo vemos a un país europeo en el top 10.
+
+### Gráfico
+
+```{r, eval = TRUE}
+
+df_lab <- df_comp %>%
+  select(Country, Region, World.Rank, Region.Rank, Labor.Freedom)
+
+df_lab1 <- df_lab %>%
+  slice_max(Labor.Freedom, n = 10) %>%
+  select(Country, Region, World.Rank, Region.Rank, Labor.Freedom)
+
+#Convertirmos a factor la columna Razón
+df_lab1$Country<-factor(df_lab1$Country, levels = df_lab1$Country)
+
+ggplot(df_lab1, aes(y = fct_rev(Country), x = Labor.Freedom)) +
+  geom_col(fill = "#2A759F") +
+  geom_text(aes(label = Labor.Freedom), hjust = -0.15, size = 3.25) +
+  scale_x_continuous(breaks = seq(0, 100, 20), limits = c(0, 100)) +
+  labs(title = "Top 10 paises con mayor libertad laboral",
+       subtitle = "en 2019",
+       x = "Puntuación en libertad laboral",
+       y = "Países") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle =30))
+
+```
+
+### Tabla
+
+```{r, eval = TRUE}
+
+df_lab1 <- df_lab %>%
+  slice_max(Labor.Freedom, n = 10) %>%
+  select(Country, Region, World.Rank, Region.Rank, Labor.Freedom) %>%
+  rename("País" = Country, "Región" = Region, "Ranking mundial" = World.Rank, "Ranking regional" = Region.Rank, "Libertad laboral" = Labor.Freedom)
+
+
+knitr::kable(df_lab1, 
+             align = "c", 
+             caption = "Top 10 paises con mayor libertad laboral",
+             digits = 2) %>%
+  kableExtra::kable_styling(fixed_thead = list(enabled = T, 
+                                               background = "white")) %>%
+  column_spec(1, background = "white")
+
+```
+
+## Libertad financiera {.tabset .tabset-pills}
+
+Según la economía keynesiana, una mayor libertad financiera, y por tanto, una menor desregularización puede llevar consigo la mayor probabilidad de crisis financieras.
+Con la era liberal de los años 80, comenzó un proceso liberalizador de las finanzas, cuyo foco principal fue Estados Unidos y Reino Unido. Muchos economistas afirman que este proceso conllevo a la crisis financiera de 2007. Este hecho hizo que a posteriori la regularización se implementara en mayor medida.
+
+### Gráfico
+
+```{r, eval = TRUE}
+
+df_fin <- df_comp %>%
+  select(Country, Region, World.Rank, Region.Rank, Financial.Freedom)
+
+df_fin1 <- df_fin %>%
+  slice_max(Financial.Freedom, n = 10) %>%
+  select(Country, Region, World.Rank, Region.Rank, Financial.Freedom)
+
+#Convertirmos a factor la columna Razón
+df_fin1$Country<-factor(df_fin1$Country, levels = df_fin1$Country)
+
+ggplot(df_fin1, aes(y = fct_rev(Country), x = Financial.Freedom)) +
+  geom_col(fill = "#2A759F") +
+  geom_text(aes(label = Financial.Freedom), hjust = -0.15, size = 3.25) +
+  scale_x_continuous(breaks = seq(0, 100, 20), limits = c(0, 100)) +
+  labs(title = "Top 10 paises con mayor libertad financiera",
+       subtitle = "en 2019",
+       x = "Puntuación en libertad financiera",
+       y = "Países") +
+  theme(axis.text.x = element_text(angle =30)) + 
+  theme_classic()
+
+```
+
+### Tabla
+
+```{r, eval = TRUE}
+
+df_fin1 <- df_fin %>%
+  slice_max(Financial.Freedom, n = 10) %>%
+  select(Country, Region, World.Rank, Region.Rank, Financial.Freedom) %>%
+  rename("País" = Country, "Región" = Region, "Ranking mundial" = World.Rank, "Ranking regional" = Region.Rank, "Libertad financiera" = Financial.Freedom)
+
+
+knitr::kable(df_fin1, 
+             align = "c", 
+             caption = "Top 10 paises con mayor libertad financiera",
+             digits = 2) %>%
+  kableExtra::kable_styling(fixed_thead = list(enabled = T, 
+                                               background = "white")) %>%
+  column_spec(1, background = "white")
+
+```
+
+# Análisis de los paises por regiones {.tabset .tabset-pills} 
+
+Vemos que la región con mayor libertad económica, y por tanto, con mayor media en este índice es Europa.
+
+La Fundación Heritage informa que el 20% superior en el índice tiene el doble del ingreso per cápita que aquellos en el segundo quintil, y cinco veces el del 20% inferior.
+
+## Gráfico
+
+```{r, eval = TRUE}
+
+# Cogemos el top 5 de cada región
+
+df_max <- df %>%
+  group_by(Region) %>%
+  slice_max(Score_2019, n = 5) %>%
+  select(Country, Region, Region.Rank, Score_2019, Grado_libertad)
+
+df_max$Country<-factor(df_max$Country, levels = df_max$Country)
+
+my_colors <- c('#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00')
+
+h <- ggplot(df_max, aes(y = fct_rev(Country), 
+                         x = Score_2019,
+                         fill = Region)) + 
+  geom_col() +
+  scale_fill_manual(values = my_colors) +
+  scale_x_continuous(breaks = seq(0, 100, 20), limits = c(0, 100)) +
+  labs(title = "Índice de libertad económica por regiones",
+       subtitle = "Top 5 por region",
+       y = "País",
+       x = "Puntuación en 2019") +
+  theme_classic()
+
+h
+
+```
+
+## Tabla
+
+```{r, eval = TRUE}
+df_max <- df %>%
+  group_by(Region) %>%
+  slice_max(Score_2019, n = 5) %>%
+  select(Country, Region, Region.Rank, Score_2019, Grado_libertad) %>%
+  rename("País" = Country, "Región" = Region, "Ranking regional" = Region.Rank, "Puntuación" = Score_2019, "Grado de libertad" = Grado_libertad)
+
+gt_max<- gt(df_max) %>% 
+  tab_header(title = md("**Top 5 por regiones**"),
+             subtitle = "en 2019") 
+
+gt_max
+
+```
+
+## Box-plot
+
+```{r, eval = TRUE}
+
+my_palette <- c('#1b9e77','#d95f02','#7570b3','#e7298a','#66a61e')
+
+df_regiones <- df %>%
+  group_by(Region) %>%
+  select(Country, Region, Region.Rank, Score_2019, Grado_libertad)
+
+
+p5 <- ggplot(df_regiones, aes(x = Region,
+                              y = Score_2019,
+                              fill = Region)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.15, alpha = 0.2, color = "tomato") +
+  scale_fill_manual(values = my_palette) +
+  scale_y_continuous(breaks = seq(0, 100, 20), limits = c(0, 100)) +
+  coord_flip() +
+  labs(title = "Puntuación por regiones",
+       subtitle = "en 2019",
+       x = "Región",
+       y = "Puntuación") +
+  theme_classic() +
+  theme(legend.position = "none",
+       panel.background = element_rect(fill = NA)) 
+
+p5
+
+```
+
+
+## Mapa
+
+```{r, eval = TRUE}
+world <- ne_countries(scale = "medium", returnclass = "sf")
+world <- world %>% filter(subregion != "Antarctica") %>% filter(admin != "Greenland")
+world <- world %>% select(name, iso_a3, geometry)
+
+df_join <- left_join (df, world, by = c("Country" = "name"))
+
+df_world <- df_join %>%
+  mutate(Score_2019_5 = ntile(Score_2019, 5)) %>%
+  select(Country, Region, World.Rank, Region.Rank, Score_2019, Score_2019_5, geometry)
+
+gg <- ggplot(df_world, aes(fill = Score_2019, geometry = geometry)) +
+  geom_sf() +
+  scale_fill_gradient("Puntuación", high = "#993404", low = "#ffffd4", breaks = seq(20,100, 20), limits = c(20,100)) + 
+  labs(title = "Índice de libertad económica",
+       subtitle = "en 2019",
+       caption = "Los paises en blanco no tienen datos")  + 
+  theme(panel.background = element_rect(fill = NA),
+        legend.text = element_text(face = "italic"),
+        legend.title = element_text(face = "italic"),
+        legend.position = "bottom", 
+        legend.direction = "horizontal",
+        axis.ticks = element_line(linetype = "blank"),
+        axis.text = element_text(colour = "white"))
+
+gg
+
+```
+
+## Media regional
+
+```{r, eval = TRUE}
+
+df_reg <- df %>%
+  group_by(Region) %>%
+  summarise(Media = mean(Score_2019)) %>%
+  arrange(desc(Media)) %>%
+  select(Region, Media)
+
+gt_reg <- gt(df_reg) %>% 
+  tab_header(title = md("**Puntuación media regional en el índice de libertad económica**"),
+             subtitle = "en 2019") 
+
+gt_reg
+
+```
+
+
+# Puntuación y PIB per cápita  {.tabset .tabset-pills}
+
+La Fundación Heritage informa que el 20% superior en el índice tiene el doble del ingreso per cápita que aquellos en el segundo quintil, y cinco veces el del 20% inferior, por lo tanto hay una correlación positiva entre libertad económica y desarrollo. Queremos comprobar esto.
+
+Se puede observar que los países con mayor libertad económica tienen un mayor PIB per cápita en términos medios, excepto para el caso de la región de Oriente Medio y Norte de África, que poseen más PIB per cápita que los países europeos, por el negocio del petróleo.
+
+## Gráfico
+
+```{r, eval = TRUE}
+
+df <- df
+
+f <- ggplot(df, aes(GDP_capita,
+               Score_2019,
+               alpha = 0.5)) +
+  geom_point(aes(color = Country)) +
+  geom_smooth(formula = y ~ x, method = "lm") +
+  labs(title = "Relación PIB per cápita y libertad económica",
+       subtitle = "en 2019",
+       x = "PIB per cápita",
+       y = "Libertad económica") + 
+  theme_classic() +
+  theme(legend.position = "none",
+        panel.background = element_rect(fill = NA))
+
+f
+
+#con ggplotly no sale el gráfico
+
+```
+
+## Media PIB per cápita por regiones
+
+```{r, eval = TRUE}
+
+df_gdp <- df %>%
+  group_by(Region) %>%
+  summarise(media_GDP_capita = mean(GDP_capita)) %>%
+  arrange(desc(media_GDP_capita))
+
+df_gdp$Region <- factor(df_gdp$Region, levels = df_gdp$Region)
+
+my_colors <- c('#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00')
+
+g <- ggplot(df_gdp, aes(y = fct_rev(Region),
+                   x = media_GDP_capita,
+                   fill = Region)) +
+  geom_col(show.legend = FALSE) +
+  scale_fill_manual(values = my_colors) +
+  scale_x_continuous(breaks = seq(0, 45000, 5000), limits = c(0, 45000)) +
+  geom_text(aes(label = round(media_GDP_capita, digits = 0)), hjust = -0.10, size = 3.25) +
+  labs(title = "PIB per cápita medio por regiones",
+       subtitle = "en 2019",
+       y = "Región",
+       x = "PIB per cápita medio") + 
+  theme(panel.background = element_rect(fill = NA)) +
+  theme_classic()
+g
+
+```
+
+## Media de la puntuación por regiones
+
+```{r, eval = TRUE}
+
+df_puntuacion <- df %>%
+  group_by(Region) %>%
+  summarise(media_score_2019 = mean(Score_2019)) %>%
+  arrange(desc(media_score_2019))
+  
+df_puntuacion$Region <- factor(df_puntuacion$Region ,levels = df_puntuacion$Region)
+
+ggplot(df_puntuacion, aes(x = media_score_2019,
+                          y = fct_rev(Region),
+                          fill = Region)) +
+  geom_col(show.legend = FALSE) +
+  geom_text(aes(label = round(media_score_2019, digits = 2)), hjust = -0.10, size = 3.25) +
+  scale_fill_manual(values = my_colors) +
+  coord_cartesian(xlim = c(40, 70)) +
+  labs(title = "Puntuación media por regiones",
+       subtitle = "en 2019",
+       y = "Región",
+       x = "Puntuación media") + 
+  theme_classic() +
+  theme(panel.background = element_rect(fill = NA))
+
+df_join <- left_join(df_puntuacion, df_gdp, by = "Region") %>%
+  arrange(desc(media_score_2019))
+
+```
+
+## Tabla
+
+```{r, eval = TRUE}
+
+df_gdp <- df %>%
+  group_by(Region) %>%
+  summarise(media_GDP_capita = mean(GDP_capita))
+
+df_puntuacion <- df %>%
+  group_by(Region) %>%
+  summarise(media_score_2019 = mean(Score_2019))
+
+df_join <- left_join(df_puntuacion, df_gdp, by = "Region") %>%
+  arrange(desc(media_score_2019)) %>%
+  rename("Región" = Region,
+  "Puntuación media" = media_score_2019,
+  "PIB per cápita medio" = media_GDP_capita)
+
+knitr::kable(df_join, 
+             align = "c", 
+             caption = "Puntuación y PIB per cápita medios por regiones",
+             digits = 2) %>%
+  kableExtra::kable_styling(fixed_thead = list(enabled = T, 
+                                               background = "white")) %>%
+  column_spec(1, background = "white")
+
+```
+
+# Bibliografía
+
+[Kaggle](https://www.kaggle.com/lewisduncan93/the-economic-freedom-index?select=economic_freedom_index2019_data.csv)
+
+[Tutoriales de la asignatura](https://perezp44.github.io/intro-ds-21-22-web/04-tutoriales.html)
+
+[The Heritage Foundation (2019): World Economic Freedom Index](https://www.heritage.org/index/)
+
+https://rpubs.com
+
+https://colorbrewer2.org
+
+<br><br>
+
+```{r, echo = FALSE}
+sessioninfo::session_info() %>% details::details(summary = 'Información de mi R-sesión:') 
+```
+
+
+<br><br>
+
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>
+<br><br>
+
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>
